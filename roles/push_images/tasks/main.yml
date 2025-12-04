@@ -1,0 +1,37 @@
+---
+# Detect engine
+- name: Detect Docker
+  command: docker --version
+  register: docker_check
+  ignore_errors: true
+
+- name: Detect Podman
+  command: podman --version
+  register: podman_check
+  ignore_errors: true
+
+- name: Auto detect container engine
+  set_fact:
+    container_engine: >-
+      {{ 'docker' if docker_check.rc == 0 else
+         'podman' if podman_check.rc == 0 else
+         'docker' }}
+  when: container_engine == "auto"
+
+# Tag & Push
+- name: Tag and push images
+  block:
+    - name: Tag & push (Docker)
+      shell: |
+        docker tag {{ item.name }}:{{ item.tag }} {{ registry_host }}:{{ registry_port }}/{{ item.name }}:{{ item.tag }}
+        docker push {{ registry_host }}:{{ registry_port }}/{{ item.name }}:{{ item.tag }}
+      loop: "{{ images_to_push }}"
+      when: container_engine == "docker"
+
+    - name: Tag & push (Podman)
+      shell: |
+        podman tag {{ item.name }}:{{ item.tag }} {{ registry_host }}:{{ registry_port }}/{{ item.name }}:{{ item.tag }}
+        podman push {{ registry_host }}:{{ registry_port }}/{{ item.name }}:{{ item.tag }}
+      loop: "{{ images_to_push }}"
+      when: container_engine == "podman"
+

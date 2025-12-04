@@ -1,0 +1,44 @@
+---
+# Detect engine
+- name: Detect Docker
+  command: docker --version
+  register: docker_check
+  ignore_errors: true
+
+- name: Detect Podman
+  command: podman --version
+  register: podman_check
+  ignore_errors: true
+
+- name: Auto detect container engine
+  set_fact:
+    container_engine: >-
+      {{ 'docker' if docker_check.rc == 0 else
+         'podman' if podman_check.rc == 0 else
+         'docker' }}
+  when: container_engine == "auto"
+
+# Run containers
+- name: Start containers
+  block:
+    - name: Start container (Docker)
+      community.docker.docker_container:
+        name: "{{ item.name }}"
+        image: "{{ item.image }}"
+        state: started
+        restart_policy: always
+        published_ports:
+          - "{{ item.host_port }}:22"
+      loop: "{{ containers_list }}"
+      when: container_engine == "docker"
+
+    - name: Start container (Podman)
+      containers.podman.podman_container:
+        name: "{{ item.name }}"
+        image: "{{ item.image }}"
+        state: started
+        publish:
+          - "{{ item.host_port }}:22"
+      loop: "{{ containers_list }}"
+      when: container_engine == "podman"
+

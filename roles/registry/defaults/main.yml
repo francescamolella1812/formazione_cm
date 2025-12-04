@@ -1,0 +1,6 @@
+---
+registry_image: "registry:2"
+registry_name: "local-registry"
+registry_port: 5000
+container_engine: "auto"     # auto-detect docker/podman
+

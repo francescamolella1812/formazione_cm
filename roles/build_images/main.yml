@@ -1,0 +1,43 @@
+---
+# Detect engine
+- name: Check for Docker
+  command: docker --version
+  register: docker_check
+  ignore_errors: true
+
+- name: Check for Podman
+  command: podman --version
+  register: podman_check
+  ignore_errors: true
+
+- name: Auto detect container engine
+  set_fact:
+    container_engine: >-
+      {{ 'docker' if docker_check.rc == 0 else
+         'podman' if podman_check.rc == 0 else
+         'docker' }}
+  when: container_engine == "auto"
+
+# Build images
+- name: Build container images
+  block:
+    - name: Build image with Docker
+      community.docker.docker_image:
+        name: "{{ item.name }}"
+        tag: "{{ item.tag }}"
+        source: build
+        build:
+          path: "{{ item.path }}"
+      loop: "{{ images_to_build }}"
+      when: container_engine == "docker"
+
+    - name: Build image with Podman
+      containers.podman.podman_image:
+        name: "{{ item.name }}"
+        tag: "{{ item.tag }}"
+        build:
+          dockerfile: "{{ item.path }}/Dockerfile"
+          path: "{{ item.path }}"
+      loop: "{{ images_to_build }}"
+      when: container_engine == "podman"
+

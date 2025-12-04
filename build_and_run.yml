@@ -1,0 +1,114 @@
+---
+- name: Build and run SSH-enabled containers (Ubuntu + AlmaLinux)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  collections:
+    - community.docker
+
+  vars:
+    # nomi immagine/container
+    ubuntu_image: ubuntu-ssh:latest
+    almalinux_image: almalinux-ssh:latest
+    ubuntu_container: ubuntu-ssh-instance
+    almalinux_container: almalinux-ssh-instance
+
+    # porte host usate per mappare container:22
+    ubuntu_host_port: 2222
+    almalinux_host_port: 2223
+
+    # percorso chiave pubblica locale che verrà iniettata
+    pubkey_path: "{{ lookup('env','HOME') + '/.ssh/id_ed25519.pub' }}"
+  
+  tasks:
+    - name: Ensure community.docker collection is present (warning if missing)
+      ansible.builtin.meta: noop
+
+    - name: Build Ubuntu image
+      docker_image:
+        name: "{{ ubuntu_image }}"
+        source: build
+        build:
+          path: ./build_ubuntu
+        state: present
+
+    - name: Build AlmaLinux image
+      docker_image:
+        name: "{{ almalinux_image }}"
+        source: build
+        build:
+          path: ./build_almalinux
+        state: present
+
+    - name: Start Ubuntu container (map host port {{ ubuntu_host_port }} -> container 22)
+      community.docker.docker_container:
+        name: "{{ ubuntu_container }}"
+        image: "{{ ubuntu_image }}"
+        state: started
+        restart_policy: always
+        published_ports:
+          - "{{ ubuntu_host_port }}:22"
+
+    - name: Start AlmaLinux container (map host port {{ almalinux_host_port }} -> container 22)
+      community.docker.docker_container:
+        name: "{{ almalinux_container }}"
+        image: "{{ almalinux_image }}"
+        state: started
+        restart_policy: always
+        published_ports:
+          - "{{ almalinux_host_port }}:22"
+
+    - name: Wait for SSH to be available on Ubuntu host port
+      wait_for:
+        host: 127.0.0.1
+        port: "{{ ubuntu_host_port }}"
+        delay: 1
+        timeout: 30
+
+    - name: Wait for SSH to be available on AlmaLinux host port
+      wait_for:
+        host: 127.0.0.1
+        port: "{{ almalinux_host_port }}"
+        delay: 1
+        timeout: 30
+
+    - name: Read local public key
+      ansible.builtin.slurp:
+        src: "{{ pubkey_path }}"
+      register: local_pubkey
+      failed_when: local_pubkey is not defined or local_pubkey.content is not defined
+
+    - name: Inject public key into Ubuntu container (authorized_keys)
+      ansible.builtin.shell: |
+        docker exec -i {{ ubuntu_container }} bash -c "umask 077 && mkdir -p /home/sshuser/.ssh && cat > /home/sshuser/.ssh/authorized_keys && chown -R sshuser:sshuser /home/sshuser && chmod 700 /home/sshuser/.ssh && chmod 600 /home/sshuser/.ssh/authorized_keys"
+      args:
+        stdin: "{{ local_pubkey.content | b64decode }}"
+
+    - name: Inject public key into AlmaLinux container (authorized_keys)
+      ansible.builtin.shell: |
+        docker exec -i {{ almalinux_container }} bash -c "umask 077 && mkdir -p /home/sshuser/.ssh && cat > /home/sshuser/.ssh/authorized_keys && chown -R sshuser:sshuser /home/sshuser && chmod 700 /home/sshuser/.ssh && chmod 600 /home/sshuser/.ssh/authorized_keys"
+      args:
+        stdin: "{{ local_pubkey.content | b64decode }}"
+
+    - name: Final check - show running containers (summary)
+      community.docker.docker_container_info:
+        name: "{{ ubuntu_container }}"
+      register: info_ubuntu
+
+    - name: Debug Ubuntu container info (short)
+      ansible.builtin.debug:
+        msg:
+          - "Ubuntu container {{ ubuntu_container }} running, mapped port -> {{ ubuntu_host_port }}:22"
+          - "State: {{ info_ubuntu.container.State.Status }}"
+
+    - name: Get AlmaLinux container info
+      community.docker.docker_container_info:
+        name: "{{ almalinux_container }}"
+      register: info_alma
+
+    - name: Debug AlmaLinux container info (short)
+      ansible.builtin.debug:
+        msg:
+          - "AlmaLinux container {{ almalinux_container }} running, mapped port -> {{ almalinux_host_port }}:22"
+          - "State: {{ info_alma.container.State.Status }}"
+

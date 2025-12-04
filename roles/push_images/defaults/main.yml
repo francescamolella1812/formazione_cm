@@ -1,0 +1,11 @@
+---
+images_to_push:
+  - name: ubuntu-ssh
+    tag: latest
+  - name: almalinux-ssh
+    tag: latest
+
+registry_host: "localhost"
+registry_port: 5000
+container_engine: "auto"
+

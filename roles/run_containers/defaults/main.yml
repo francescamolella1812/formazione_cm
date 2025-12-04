@@ -1,0 +1,12 @@
+---
+containers_list:
+  - name: ubuntu-ssh-instance
+    image: "ubuntu-ssh:latest"
+    host_port: 2222
+
+  - name: almalinux-ssh-instance
+    image: "almalinux-ssh:latest"
+    host_port: 2223
+
+container_engine: "auto"
+

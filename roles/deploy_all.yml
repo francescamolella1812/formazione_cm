@@ -1,0 +1,11 @@
+---
+- name: Full container build pipeline with roles
+  hosts: localhost
+  connection: local
+
+  roles:
+    - registry
+    - build_images
+    - push_images
+    - run_containers
+

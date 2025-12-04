@@ -1,0 +1,24 @@
+---
+- name: Deploy new application version
+  hosts: server_deploy
+  become: true
+
+  vars:
+    image_version: "{{ lookup('env','BUILD_NUMBER') | default('latest', true) }}"
+
+  tasks:
+
+    - name: Pull new image version from local registry
+      ansible.builtin.shell: >
+        docker pull localhost:5000/myapp:{{ image_version }}
+
+    - name: Stop old container if exists
+      ansible.builtin.shell: |
+        docker stop myapp 2>/dev/null || true
+        docker rm myapp 2>/dev/null || true
+
+    - name: Start new container from pulled image
+      ansible.builtin.shell: >
+        docker run -d --name myapp -p 8080:80
+        localhost:5000/myapp:{{ image_version }}
+

@@ -1,0 +1,26 @@
+---
+- name: Configure Docker Registry
+  hosts: all
+  become: true
+
+  tasks:
+    - name: Install Docker
+      package:
+        name: docker
+        state: present
+
+    - name: Ensure Docker service is running
+      service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Start Docker Registry (no authentication)
+      docker_container:
+        name: local-registry
+        image: registry:2
+        state: started
+        restart_policy: always
+        published_ports:
+          - "5000:5000"
+

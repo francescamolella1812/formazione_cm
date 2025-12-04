@@ -1,0 +1,47 @@
+---
+# Detect container engine
+- name: Load registry credentials (vault)
+  include_vars: registry_credentials.yml
+
+- debug:
+    msg: "Using registry user {{ registry_username }}"
+
+- name: Check for Docker
+  command: docker --version
+  register: docker_check
+  ignore_errors: true
+
+- name: Check for Podman
+  command: podman --version
+  register: podman_check
+  ignore_errors: true
+
+- name: Auto detect container engine
+  set_fact:
+    container_engine: >-
+      {{ 'docker' if docker_check.rc == 0 else
+         'podman' if podman_check.rc == 0 else
+         'docker' }}
+  when: container_engine == "auto"
+
+# Start registry with Docker
+- name: Start registry (Docker)
+  community.docker.docker_container:
+    name: "{{ registry_name }}"
+    image: "{{ registry_image }}"
+    state: started
+    restart_policy: always
+    published_ports:
+      - "{{ registry_port }}:5000"
+  when: container_engine == "docker"
+
+# Start registry with Podman
+- name: Start registry (Podman)
+  containers.podman.podman_container:
+    name: "{{ registry_name }}"
+    image: "{{ registry_image }}"
+    state: started
+    publish:
+      - "{{ registry_port }}:5000"
+  when: container_engine == "podman"
+

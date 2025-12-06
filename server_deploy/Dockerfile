@@ -2,12 +2,17 @@
 FROM ubuntu:22.04
 
 # ------------------------------
-# Install OS utilities + SSH + sudo
+# Install OS utilities + SSH + sudo + Git
 # ------------------------------
 RUN apt-get update && apt-get install -y \
     openssh-server sudo curl gnupg lsb-release ca-certificates \
-    git \
+    git python3 python3-pip sshpass software-properties-common \
     && rm -rf /var/lib/apt/lists/*
+
+# ------------------------------
+# Install Ansible
+# ------------------------------
+RUN pip3 install ansible
 
 # ------------------------------
 # Install Java (required by Jenkins remoting)
@@ -38,35 +43,23 @@ RUN echo "sshuser ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/sshuser && \
 # ------------------------------
 # SSH configuration
 # ------------------------------
-
-# Generate host keys
 RUN ssh-keygen -A
 
-# Create .ssh with correct owner and permissions
 RUN mkdir -p /home/sshuser/.ssh && \
     chown sshuser:sshuser /home/sshuser/.ssh && \
     chmod 700 /home/sshuser/.ssh
 
-# Required for sshd
 RUN mkdir -p /run/sshd && chmod 755 /run/sshd
 
-# Load authorized keys from secret
 RUN --mount=type=secret,id=ssh_pub_key \
     cat /run/secrets/ssh_pub_key > /home/sshuser/.ssh/authorized_keys && \
     chown sshuser:sshuser /home/sshuser/.ssh/authorized_keys && \
     chmod 600 /home/sshuser/.ssh/authorized_keys
 
-# Disable password login
 RUN sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config && \
     sed -i 's/^#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config
 
-# ------------------------------
-# Expose SSH
-# ------------------------------
 EXPOSE 22
 
-# ------------------------------
-# Run SSHD in foreground
-# ------------------------------
 CMD ["/usr/sbin/sshd", "-D"]
 

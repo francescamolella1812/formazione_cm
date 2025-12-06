@@ -1,49 +1,72 @@
-# BASE: Ubuntu stabile
+# syntax=docker/dockerfile:1.4
 FROM ubuntu:22.04
 
-# Evita domande interattive
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Installa pacchetti base + SSH + sudo + dipendenze Docker
+# ------------------------------
+# Install OS utilities + SSH + sudo
+# ------------------------------
 RUN apt-get update && apt-get install -y \
-    ca-certificates \
-    curl \
-    gnupg \
-    lsb-release \
-    openssh-server \
-    sudo \
-    iptables \
-    uidmap \
+    openssh-server sudo curl gnupg lsb-release ca-certificates \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
-# Installa Docker Engine (script ufficiale)
-RUN curl -fsSL https://get.docker.com | sh
+# ------------------------------
+# Install Java (required by Jenkins remoting)
+# ------------------------------
+RUN apt-get update && apt-get install -y openjdk-17-jre-headless \
+    && rm -rf /var/lib/apt/lists/*
 
-# Attiva cartella SSH
-RUN mkdir -p /var/run/sshd
+# ------------------------------
+# Install ONLY Docker CLI (NO dockerd)
+# ------------------------------
+RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+      | gpg --dearmor -o /usr/share/keyrings/docker-cli.gpg && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-cli.gpg] \
+      https://download.docker.com/linux/ubuntu \
+      $(lsb_release -cs) stable" \
+      > /etc/apt/sources.list.d/docker.list && \
+    apt-get update && apt-get install -y docker-ce-cli
 
-# Crea utente sshuser
-RUN useradd -m -s /bin/bash sshuser && \
-    usermod -aG docker sshuser && \
-    echo "sshuser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+# ------------------------------
+# Create user for Jenkins agent
+# ------------------------------
+RUN useradd -m -s /bin/bash sshuser
 
-# Prepara directory .ssh
+# Allow sudo without password
+RUN echo "sshuser ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/sshuser && \
+    chmod 0440 /etc/sudoers.d/sshuser
+
+# ------------------------------
+# SSH configuration
+# ------------------------------
+
+# Generate host keys
+RUN ssh-keygen -A
+
+# Create .ssh with correct owner and permissions
 RUN mkdir -p /home/sshuser/.ssh && \
-    chmod 700 /home/sshuser/.ssh && \
-    chown sshuser:sshuser /home/sshuser/.ssh
+    chown sshuser:sshuser /home/sshuser/.ssh && \
+    chmod 700 /home/sshuser/.ssh
 
-# Copia chiave pubblica (come secret)
+# Required for sshd
+RUN mkdir -p /run/sshd && chmod 755 /run/sshd
+
+# Load authorized keys from secret
 RUN --mount=type=secret,id=ssh_pub_key \
     cat /run/secrets/ssh_pub_key > /home/sshuser/.ssh/authorized_keys && \
     chown sshuser:sshuser /home/sshuser/.ssh/authorized_keys && \
     chmod 600 /home/sshuser/.ssh/authorized_keys
 
-# Genera le host keys
-RUN ssh-keygen -A
+# Disable password login
+RUN sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config && \
+    sed -i 's/^#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config
 
-# Espone SSH
+# ------------------------------
+# Expose SSH
+# ------------------------------
 EXPOSE 22
 
-# Avvia Docker daemon + SSH
-CMD ["/bin/bash", "-c", "dockerd & exec /usr/sbin/sshd -D"]
+# ------------------------------
+# Run SSHD in foreground
+# ------------------------------
+CMD ["/usr/sbin/sshd", "-D"]
 

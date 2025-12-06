@@ -1,0 +1,59 @@
+---
+- name: Detect Docker
+  command: docker --version
+  register: docker_check
+  ignore_errors: true
+
+- name: Detect Podman
+  command: podman --version
+  register: podman_check
+  ignore_errors: true
+
+- name: Set container engine
+  set_fact:
+    container_engine: >-
+      {{ 'docker' if docker_check.rc == 0 else
+         'podman' if podman_check.rc == 0 else
+         'docker' }}
+
+# -------- BUILD IMAGE --------
+- name: Build Jenkins agent image (Docker)
+  community.docker.docker_image:
+    name: "{{ jenkins_image_name }}"
+    tag: "{{ jenkins_image_tag }}"
+    source: build
+    build:
+      path: "{{ jenkins_dockerfile_path }}"
+  when: container_engine == "docker"
+
+- name: Build Jenkins agent image (Podman)
+  containers.podman.podman_image:
+    name: "{{ jenkins_image_name }}"
+    tag: "{{ jenkins_image_tag }}"
+    build:
+      path: "{{ jenkins_dockerfile_path }}"
+  when: container_engine == "podman"
+
+# -------- RUN CONTAINER --------
+- name: Run Jenkins agent (Docker)
+  community.docker.docker_container:
+    name: "{{ jenkins_container_name }}"
+    image: "{{ jenkins_image_name }}:{{ jenkins_image_tag }}"
+    state: started
+    published_ports:
+      - "{{ jenkins_agent_port }}:22"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+  when: container_engine == "docker"
+
+- name: Run Jenkins agent (Podman)
+  containers.podman.podman_container:
+    name: "{{ jenkins_container_name }}"
+    image: "{{ jenkins_image_name }}:{{ jenkins_image_tag }}"
+    state: started
+    publish:
+      - "{{ jenkins_agent_port }}:22"
+    volume:
+      - /var/run/docker.sock:/var/run/docker.sock
+  when: container_engine == "podman"
+

@@ -1,5 +1,5 @@
 pipeline {
-    agent any
+    agent { label 'jenkins-agent' }
 
     environment {
         REGISTRY = "localhost:5000"
@@ -10,15 +10,19 @@ pipeline {
     stages {
 
         stage('Checkout') {
-            steps {
-                checkout scm
-            }
+            steps { checkout scm }
         }
 
-        stage('Build Docker image') {
+        stage('Build image (Docker or Podman)') {
             steps {
                 sh """
-                    docker build -t ${IMAGE_NAME}:${TAG} build_ubuntu
+                    if command -v docker >/dev/null 2>&1; then
+                        echo "Using Docker engine"
+                        docker build -t ${IMAGE_NAME}:${TAG} build_ubuntu
+                    else
+                        echo "Using Podman engine"
+                        podman build -t ${IMAGE_NAME}:${TAG} build_ubuntu
+                    fi
                 """
             }
         }
@@ -26,7 +30,11 @@ pipeline {
         stage('Tag image for registry') {
             steps {
                 sh """
-                    docker tag ${IMAGE_NAME}:${TAG} ${REGISTRY}/${IMAGE_NAME}:${TAG}
+                    if command -v docker >/dev/null 2>&1; then
+                        docker tag ${IMAGE_NAME}:${TAG} ${REGISTRY}/${IMAGE_NAME}:${TAG}
+                    else
+                        podman tag ${IMAGE_NAME}:${TAG} ${REGISTRY}/${IMAGE_NAME}:${TAG}
+                    fi
                 """
             }
         }
@@ -34,7 +42,11 @@ pipeline {
         stage('Push image to registry') {
             steps {
                 sh """
-                    docker push ${REGISTRY}/${IMAGE_NAME}:${TAG}
+                    if command -v docker >/dev/null 2>&1; then
+                        docker push ${REGISTRY}/${IMAGE_NAME}:${TAG}
+                    else
+                        podman push ${REGISTRY}/${IMAGE_NAME}:${TAG}
+                    fi
                 """
             }
         }
@@ -42,7 +54,9 @@ pipeline {
         stage('Deploy with Ansible') {
             steps {
                 sh """
-                    BUILD_NUMBER=${TAG} ansible-playbook -i inventory/hosts.ini deploy_app.yml --vault-password-file ~/.vault
+                    ansible-playbook -i inventory/hosts.ini deploy_app.yml \
+                    --vault-password-file ~/.vault \
+                    --extra-vars "build_number=${TAG}"
                 """
             }
         }

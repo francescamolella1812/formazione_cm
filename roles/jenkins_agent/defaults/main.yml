@@ -1,0 +1,7 @@
+jenkins_image_name: jenkins-agent
+jenkins_image_tag: latest
+jenkins_dockerfile_path: server_deploy
+jenkins_container_name: jenkins-agent
+jenkins_agent_port: 2222
+container_engine: auto
+

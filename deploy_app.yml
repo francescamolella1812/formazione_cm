@@ -1,16 +1,18 @@
 ---
 - name: Deploy new application version
   hosts: server_deploy
+  connection: local
   become: true
 
   vars:
-    image_version: "{{ lookup('env','BUILD_NUMBER') | default('latest', true) }}"
+    image_version: "{{ build_number | default(lookup('env','BUILD_NUMBER')) | default('latest', true) }}"
+    registry: "host.docker.internal:5000"  # Accesso al registry dall'interno del container
 
   tasks:
 
     - name: Pull new image version from local registry
       ansible.builtin.shell: >
-        docker pull localhost:5000/myapp:{{ image_version }}
+        docker pull {{ registry }}/myapp:{{ image_version }}
 
     - name: Stop old container if exists
       ansible.builtin.shell: |
@@ -20,5 +22,4 @@
     - name: Start new container from pulled image
       ansible.builtin.shell: >
         docker run -d --name myapp -p 8080:80
-        localhost:5000/myapp:{{ image_version }}
-
+        {{ registry }}/myapp:{{ image_version }}

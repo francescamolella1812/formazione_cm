@@ -5,6 +5,7 @@ pipeline {
         REGISTRY = "localhost:5000"
         IMAGE_NAME = "myapp"
         TAG = "${BUILD_NUMBER}"
+        INVENTORY = "/home/sshuser/workspace/Pipeline/inventory/hosts.ini"
     }
 
     stages {
@@ -54,12 +55,10 @@ pipeline {
         stage('Deploy with Ansible') {
             steps {
                 sh """
-                    ansible-playbook -i inventory/hosts.ini deploy_app.yml \
-                    --vault-password-file ~/.vault \
+                    ansible-playbook -i ${INVENTORY} deploy_app.yml \
                     --extra-vars "build_number=${TAG}"
                 """
             }
         }
     }
 }
-

@@ -6,7 +6,7 @@
 
   vars:
     image_version: "{{ build_number | default(lookup('env','BUILD_NUMBER')) | default('latest', true) }}"
-    registry: "host.docker.internal:5000"  # Accesso al registry dall'interno del container
+    registry: "localhost:5000"
 
   tasks:
 
